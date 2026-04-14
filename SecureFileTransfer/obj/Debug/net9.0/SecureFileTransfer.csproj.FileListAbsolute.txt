@@ -15,3 +15,4 @@
 /Users/shubh/Documents/GitHub/SecureFileTransfer-CLI/SecureFileTransfer/bin/Debug/net9.0/YamlDotNet.dll
 /Users/shubh/Documents/GitHub/SecureFileTransfer-CLI/SecureFileTransfer/obj/Debug/net9.0/SecureFileTransfer.csproj.AssemblyReference.cache
 /Users/shubh/Documents/GitHub/SecureFileTransfer-CLI/SecureFileTransfer/obj/Debug/net9.0/SecureFi.CA992903.Up2Date
+/Users/shubh/Documents/GitHub/SecureFileTransfer-CLI/SecureFileTransfer/obj/Debug/net9.0/SecureFileTransfer.sourcelink.json

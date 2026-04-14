@@ -50,6 +50,9 @@ while (true)
             host = mhp.ManageHostPeers(host);
             break;
         case 3:
+            HostService service = new();
+            service.StartHost(host);
+            break;
         case 4:
         case 5:
             Console.Clear();
