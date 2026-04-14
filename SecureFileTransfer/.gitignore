@@ -3,8 +3,9 @@ data/.data/
 SecureFileTransfer/data/.data/
 
 # Ignore build artifacts
+SecureFileTransfer/bin/
+SecureFileTransfer/obj/
 bin/
 obj/
-
 
 .DS_Store
