@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SecureFileTransfer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+12ec3d3dbc1ea0dd7bd24d19aafcb730d9656870")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e62107c088b3914490ce7f417adfd68a9ca7b7c3")]
 [assembly: System.Reflection.AssemblyProductAttribute("SecureFileTransfer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SecureFileTransfer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
