@@ -12,6 +12,18 @@ namespace SecureFileTransfer.src.setup
     {
         public Initialize()
         {
+            string path = Path.Combine("data", ".data", "find_file_path.txt");
+            string findFilePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Desktop"
+            );
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, findFilePath);
+            }
             string fullHostName = Dns.GetHostName();
             string hostName = "";
             foreach(char c in fullHostName)
@@ -70,13 +82,13 @@ namespace SecureFileTransfer.src.setup
             string yaml = serializer.Serialize(host);
 
             // Path to hidden file
-            string path = Path.Combine("data", ".data", "host.yaml");
+            path = Path.Combine("data", ".data", "host.yaml");
 
             // Ensure directory exists
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             // Write file
-            File.WriteAllText(path, yaml);
+            if(!File.Exists(path)) File.WriteAllText(path, yaml);
 
             TransferHistoryModel logs = new();
 
@@ -84,9 +96,11 @@ namespace SecureFileTransfer.src.setup
 
             path = Path.Combine("data", ".data", "transfer_logs.yaml");
 
-            if(File.Exists(path)) return;
+            if(!File.Exists(path)) File.WriteAllText(path, yaml);
 
-            File.WriteAllText(path, yaml);
+            path = Path.Combine("data", ".data", "download_path.txt");
+            string downloadpath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads");
+            if(!File.Exists(path)) File.WriteAllText(path, downloadpath);
         }
     }
 }

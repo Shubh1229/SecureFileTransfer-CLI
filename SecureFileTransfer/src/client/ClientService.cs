@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.logging;
 
@@ -54,7 +55,9 @@ namespace SecureFileTransfer.src.client
                 Console.WriteLine($"Connected to {peer.PeerName} at {peer.IPv4}:{PORT}");
 
                 using NetworkStream stream = tcpClient.GetStream();
-                clientHandshake(host, peer, stream);
+                ClientHandshake(host, peer, stream);
+
+                SendFileInfo(stream);
 
                 logger.FinishConnection(connectionLog, true);
             }
@@ -72,7 +75,7 @@ namespace SecureFileTransfer.src.client
             }
         }
 
-        private void clientHandshake(HostModel host, PeersModel peer, NetworkStream stream)
+        private void ClientHandshake(HostModel host, PeersModel peer, NetworkStream stream)
         {
             HandshakeModel handshake = new()
             {
@@ -99,6 +102,22 @@ namespace SecureFileTransfer.src.client
             Console.WriteLine("Handshake completed.");
             Console.WriteLine($"Remote name: {receivedHandshake.SenderName}");
             Console.WriteLine($"Remote IPv4: {receivedHandshake.SenderIPv4}");
+        }
+        private void SendFileInfo(NetworkStream stream)
+        {
+            FileInfoModel file = new()
+            {
+                FileName = "test.txt",
+                FileSizeBytes = 1234,
+                RelativeSourcePath=Path.Combine(Directory.GetCurrentDirectory(),"test.txt"),
+                SuggestedSaveName="received_test.txt"
+            };
+            string json = JsonSerializer.Serialize<FileInfoModel>(file);
+            byte[] data = Encoding.UTF8.GetBytes(json);
+            stream.Write(data,0,data.Length);
+            Console.WriteLine("Sent File Info:");
+            Console.WriteLine($"Name: {file.FileName}");
+            Console.WriteLine($"Size: {file.FileSizeBytes}");
         }
     }
 }
