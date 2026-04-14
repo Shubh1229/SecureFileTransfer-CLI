@@ -1,4 +1,5 @@
-﻿using SecureFileTransfer.src.data_structures;
+﻿using SecureFileTransfer.src.client;
+using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.host;
 using SecureFileTransfer.src.setup;
 
@@ -54,6 +55,9 @@ while (true)
             service.StartHost(host);
             break;
         case 4:
+            ClientService client = new();
+            client.StartClient(host);
+            break;
         case 5:
             Console.Clear();
             new Initialize();
