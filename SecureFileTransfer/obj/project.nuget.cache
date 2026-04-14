@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "uEAoWqmx8q0=",
+  "success": true,
+  "projectFilePath": "/Users/shubh/Documents/GitHub/SecureFileTransfer-CLI/SecureFileTransfer/SecureFileTransfer.csproj",
+  "expectedPackageFiles": [
+    "/Users/shubh/.nuget/packages/yamldotnet/17.0.1/yamldotnet.17.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}
