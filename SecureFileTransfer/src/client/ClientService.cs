@@ -1,9 +1,9 @@
 using System.Net.Sockets;
-using System.Text;
 using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
+using SecureFileTransfer.src.setup;
 
 namespace SecureFileTransfer.src.client
 {
@@ -56,9 +56,31 @@ namespace SecureFileTransfer.src.client
                 Console.WriteLine($"Connected to {peer.PeerName} at {peer.IPv4}:{PORT}");
 
                 using NetworkStream stream = tcpClient.GetStream();
-                ClientHandshake(host, peer, stream);
 
-                SendFileInfo(stream);
+                bool handshakeSuccess = ClientHandshake(host, stream);
+                if (!handshakeSuccess)
+                {
+                    logger.FinishConnection(connectionLog, false);
+                    return;
+                }
+
+                List<string> selectedFiles = SelectFiles();
+                if (selectedFiles.Count == 0)
+                {
+                    Console.WriteLine("No files selected.");
+                    logger.FinishConnection(connectionLog, false);
+                    return;
+                }
+
+                SendTransferPlan(stream, selectedFiles.Count);
+
+                foreach (string filePath in selectedFiles)
+                {
+                    SendFileInfo(stream, filePath);
+
+                    FileInfo fileStats = new(filePath);
+                    logger.AddFileLog(connectionLog, fileStats.Name, fileStats.Length, true);
+                }
 
                 logger.FinishConnection(connectionLog, true);
             }
@@ -76,7 +98,7 @@ namespace SecureFileTransfer.src.client
             }
         }
 
-        private void ClientHandshake(HostModel host, PeersModel peer, NetworkStream stream)
+        private bool ClientHandshake(HostModel host, NetworkStream stream)
         {
             HandshakeModel handshake = new()
             {
@@ -85,45 +107,97 @@ namespace SecureFileTransfer.src.client
                 SenderIPv6 = host.IPv6
             };
 
-            byte[] msg = Encoding.UTF8.GetBytes(handshake.ToJson());
-            stream.Write(msg, 0, msg.Length);
+            MessageHelper.SendMessage(stream, handshake.ToJson());
 
-            byte[] buffer = new byte[1024];
-            int bytesRead = stream.Read(buffer, 0, buffer.Length);
-
-            string messageRead = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
-
-            if (receivedHandshake == null)
+            string? messageRead = MessageHelper.ReadMessage(stream);
+            if (string.IsNullOrWhiteSpace(messageRead))
             {
                 Console.WriteLine("Never received handshake return.");
-                return;
+                return false;
+            }
+
+            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
+            if (receivedHandshake == null)
+            {
+                Console.WriteLine("Failed to parse handshake return.");
+                return false;
             }
 
             Console.WriteLine("Handshake completed.");
             Console.WriteLine($"Remote name: {receivedHandshake.SenderName}");
             Console.WriteLine($"Remote IPv4: {receivedHandshake.SenderIPv4}");
+
+            return true;
         }
-        private void SendFileInfo(NetworkStream stream)
+
+        private List<string> SelectFiles()
         {
             FileBrowserService fileBrowser = new();
+            List<string> selectedFiles = new();
+
             while (true)
             {
-                Console.WriteLine("Please select file(s) to send:");
-                //string?[] filePathes = 
-                break;
+                string startPath = FindFileConfigManager.Load();
+                string? selectedFile = fileBrowser.BrowseForFile(startPath);
+
+                if (selectedFile == null)
+                {
+                    break;
+                }
+
+                if (!selectedFiles.Contains(selectedFile))
+                {
+                    selectedFiles.Add(selectedFile);
+
+                    string? parent = Path.GetDirectoryName(selectedFile);
+                    if (!string.IsNullOrWhiteSpace(parent))
+                    {
+                        FindFileConfigManager.Save(parent);
+                    }
+                }
+
+                Console.WriteLine($"\nAdded: {selectedFile}");
+                Console.Write("Add another file? (y/n): ");
+                string answer = (Console.ReadLine() ?? "").Trim().ToLower();
+
+                if (answer != "y")
+                {
+                    break;
+                }
             }
+
+            return selectedFiles;
+        }
+
+        private void SendTransferPlan(NetworkStream stream, int fileCount)
+        {
+            TransferPlanModel plan = new()
+            {
+                FileCount = fileCount
+            };
+
+            string json = JsonSerializer.Serialize(plan);
+            MessageHelper.SendMessage(stream, json);
+
+            Console.WriteLine($"Sent transfer plan for {fileCount} file(s).");
+        }
+
+        private void SendFileInfo(NetworkStream stream, string selectedFile)
+        {
+            FileInfo fileStats = new(selectedFile);
+
             FileInfoModel file = new()
             {
-                FileName = "test.txt",
-                FileSizeBytes = 1234,
-                RelativeSourcePath=Path.Combine(Directory.GetCurrentDirectory(),"test.txt"),
-                SuggestedSaveName="received_test.txt"
+                FileName = fileStats.Name,
+                FileSizeBytes = fileStats.Length,
+                RelativeSourcePath = selectedFile,
+                SuggestedSaveName = fileStats.Name
             };
-            string json = JsonSerializer.Serialize<FileInfoModel>(file);
-            byte[] data = Encoding.UTF8.GetBytes(json);
-            stream.Write(data,0,data.Length);
-            Console.WriteLine("Sent File Info:");
+
+            string json = JsonSerializer.Serialize(file);
+            MessageHelper.SendMessage(stream, json);
+
+            Console.WriteLine("Sent file info:");
             Console.WriteLine($"Name: {file.FileName}");
             Console.WriteLine($"Size: {file.FileSizeBytes}");
         }

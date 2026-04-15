@@ -49,6 +49,14 @@ namespace SecureFileTransfer.src.host
                         string ipv6 = Console.ReadLine() ?? "";
 
                         var peers = host.Peers.ToList();
+                        foreach(PeersModel peer in peers)
+                        {
+                            if(peer.IPv4.Equals(ipv4) || peer.PeerName.Equals(peerName))
+                            {
+                                Console.WriteLine("Peer is already recorded...");
+                                break;
+                            }
+                        }
                         peers.Add(new PeersModel
                         {
                             PeerName = peerName,

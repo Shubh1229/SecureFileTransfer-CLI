@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
+using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
+using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
 using SecureFileTransfer.src.setup;
 
@@ -42,13 +43,36 @@ namespace SecureFileTransfer.src.host
 
                 using NetworkStream stream = client.GetStream();
 
-                connection = hostHandshake(host, stream);
+                connection = HostHandshake(host, stream);
                 if (connection == null)
                 {
                     Console.WriteLine("Connection error...\nPress any key to continue");
                     Console.ReadKey();
                     Console.Clear();
                     return;
+                }
+
+                TransferPlanModel? plan = ReadTransferPlan(stream);
+                if (plan == null)
+                {
+                    logger.FinishConnection(connection, false);
+                    logger.SaveConnection(connection);
+                    return;
+                }
+
+                Console.WriteLine($"\nExpecting {plan.FileCount} file(s)...");
+
+                for (int i = 0; i < plan.FileCount; i++)
+                {
+                    FileInfoModel? incomingFile = ReadFileInfo(stream);
+                    if (incomingFile == null)
+                    {
+                        logger.FinishConnection(connection, false);
+                        logger.SaveConnection(connection);
+                        return;
+                    }
+
+                    logger.AddFileLog(connection, incomingFile.FileName, incomingFile.FileSizeBytes, true);
                 }
 
                 logger.FinishConnection(connection, true);
@@ -73,24 +97,19 @@ namespace SecureFileTransfer.src.host
             }
         }
 
-        private ConnectionLogModel? hostHandshake(HostModel host, NetworkStream stream)
+        private ConnectionLogModel? HostHandshake(HostModel host, NetworkStream stream)
         {
-            HandshakeModel handshake = new()
-            {
-                SenderName = host.HostName,
-                SenderIPv4 = host.IPv4,
-                SenderIPv6 = host.IPv6
-            };
-
-            byte[] buffer = new byte[1024];
-            int bytesRead = stream.Read(buffer, 0, buffer.Length);
-
-            string messageRead = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
-
-            if (receivedHandshake == null)
+            string? messageRead = MessageHelper.ReadMessage(stream);
+            if (string.IsNullOrWhiteSpace(messageRead))
             {
                 Console.WriteLine("Never received handshake.");
+                return null;
+            }
+
+            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
+            if (receivedHandshake == null)
+            {
+                Console.WriteLine("Failed to parse handshake.");
                 return null;
             }
 
@@ -106,11 +125,17 @@ namespace SecureFileTransfer.src.host
 
             if (!hasPeer)
             {
-                addPeer(host, receivedHandshake);
+                AddPeer(host, receivedHandshake);
             }
 
-            byte[] msg = Encoding.UTF8.GetBytes(handshake.ToJson());
-            stream.Write(msg, 0, msg.Length);
+            HandshakeModel handshake = new()
+            {
+                SenderName = host.HostName,
+                SenderIPv4 = host.IPv4,
+                SenderIPv6 = host.IPv6
+            };
+
+            MessageHelper.SendMessage(stream, handshake.ToJson());
 
             return new ConnectionLogModel()
             {
@@ -120,7 +145,7 @@ namespace SecureFileTransfer.src.host
             };
         }
 
-        private void addPeer(HostModel host, HandshakeModel receivedHandshake)
+        private void AddPeer(HostModel host, HandshakeModel receivedHandshake)
         {
             var peers = host.Peers.ToList();
             peers.Add(new PeersModel()
@@ -132,6 +157,52 @@ namespace SecureFileTransfer.src.host
 
             host.Peers = peers.ToArray();
             HostConfigManager.Save(host);
+        }
+
+        private TransferPlanModel? ReadTransferPlan(NetworkStream stream)
+        {
+            string? json = MessageHelper.ReadMessage(stream);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                Console.WriteLine("No transfer plan received.");
+                return null;
+            }
+
+            TransferPlanModel? plan = JsonSerializer.Deserialize<TransferPlanModel>(json);
+            if (plan == null)
+            {
+                Console.WriteLine("Failed to deserialize transfer plan.");
+                return null;
+            }
+
+            return plan;
+        }
+
+        private FileInfoModel? ReadFileInfo(NetworkStream stream)
+        {
+            string? json = MessageHelper.ReadMessage(stream);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                Console.WriteLine("No file info received.");
+                return null;
+            }
+
+            FileInfoModel? fileInfo = JsonSerializer.Deserialize<FileInfoModel>(json);
+
+            if (fileInfo == null)
+            {
+                Console.WriteLine("Failed to deserialize file info.");
+                return null;
+            }
+
+            Console.WriteLine("\nIncoming file info:");
+            Console.WriteLine($"Name: {fileInfo.FileName}");
+            Console.WriteLine($"Size: {fileInfo.FileSizeBytes} bytes");
+            Console.WriteLine($"Suggested Save Name: {fileInfo.SuggestedSaveName}");
+
+            return fileInfo;
         }
     }
 }
