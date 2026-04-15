@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
+using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
 
 namespace SecureFileTransfer.src.client
@@ -105,6 +106,13 @@ namespace SecureFileTransfer.src.client
         }
         private void SendFileInfo(NetworkStream stream)
         {
+            FileBrowserService fileBrowser = new();
+            while (true)
+            {
+                Console.WriteLine("Please select file(s) to send:");
+                //string?[] filePathes = 
+                break;
+            }
             FileInfoModel file = new()
             {
                 FileName = "test.txt",

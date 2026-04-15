@@ -1,5 +1,6 @@
 ﻿using SecureFileTransfer.src.client;
 using SecureFileTransfer.src.data_structures;
+using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.host;
 using SecureFileTransfer.src.setup;
 
