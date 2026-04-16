@@ -1,8 +1,8 @@
-using System;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using SecureFileTransfer.src.data_structures;
+using SecureFileTransfer.src.logging;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -12,6 +12,9 @@ namespace SecureFileTransfer.src.setup
     {
         public Initialize()
         {
+            DebugLogger.Separator("INITIALIZE");
+            DebugLogger.Log("Initialize started.");
+
             string path = Path.Combine("data", ".data", "find_file_path.txt");
             string findFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -23,14 +26,19 @@ namespace SecureFileTransfer.src.setup
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, findFilePath);
+                DebugLogger.Log($"Created find_file_path.txt with default path: {findFilePath}");
             }
+
             string fullHostName = Dns.GetHostName();
             string hostName = "";
-            foreach(char c in fullHostName)
+
+            foreach (char c in fullHostName)
             {
-                if(c == '.') break;
+                if (c == '.') break;
                 hostName += c;
             }
+
+            DebugLogger.Log($"Detected host name: {hostName}");
             Console.WriteLine($"Host Name: {hostName}");
 
             string IPv4_address = "", IPv6_address = "";
@@ -57,16 +65,19 @@ namespace SecureFileTransfer.src.setup
 
                     if (ip.AddressFamily == AddressFamily.InterNetwork)
                     {
-                        Console.WriteLine($"Usable IPv4 ({ni.Name}): {ip}");
                         IPv4_address = ip.ToString();
+                        DebugLogger.Log($"Detected usable IPv4 on {ni.Name}: {IPv4_address}");
+                        Console.WriteLine($"Usable IPv4 ({ni.Name}): {ip}");
                     }
                     else if (ip.AddressFamily == AddressFamily.InterNetworkV6 && !ip.IsIPv6LinkLocal)
                     {
-                        Console.WriteLine($"Usable IPv6 ({ni.Name}): {ip}");
                         IPv6_address = ip.ToString();
+                        DebugLogger.Log($"Detected usable IPv6 on {ni.Name}: {IPv6_address}");
+                        Console.WriteLine($"Usable IPv6 ({ni.Name}): {ip}");
                     }
                 }
             }
+
             HostModel host = new()
             {
                 HostName = hostName,
@@ -75,32 +86,51 @@ namespace SecureFileTransfer.src.setup
                 IPv6 = IPv6_address,
                 Peers = Array.Empty<PeersModel>()
             };
+
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
                 .Build();
 
             string yaml = serializer.Serialize(host);
 
-            // Path to hidden file
             path = Path.Combine("data", ".data", "host.yaml");
-
-            // Ensure directory exists
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            // Write file
-            if(!File.Exists(path)) File.WriteAllText(path, yaml);
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, yaml);
+                DebugLogger.Log("Created host.yaml");
+            }
 
             TransferHistoryModel logs = new();
-
             yaml = serializer.Serialize(logs);
 
             path = Path.Combine("data", ".data", "transfer_logs.yaml");
-
-            if(!File.Exists(path)) File.WriteAllText(path, yaml);
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, yaml);
+                DebugLogger.Log("Created transfer_logs.yaml");
+            }
 
             path = Path.Combine("data", ".data", "download_path.txt");
-            string downloadpath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads");
-            if(!File.Exists(path)) File.WriteAllText(path, downloadpath);
+            string downloadpath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads"
+            );
+
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, downloadpath);
+                DebugLogger.Log($"Created download_path.txt with default path: {downloadpath}");
+            }
+
+            path = Path.Combine("data", ".data", "debug.log");
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(path, "");
+            }
+
+            DebugLogger.Log("Initialize finished.");
         }
     }
 }

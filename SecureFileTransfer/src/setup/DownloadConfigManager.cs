@@ -1,3 +1,5 @@
+using SecureFileTransfer.src.logging;
+
 namespace SecureFileTransfer.src.setup
 {
     public static class DownloadConfigManager
@@ -15,16 +17,20 @@ namespace SecureFileTransfer.src.setup
                 );
 
                 Save(defaultPath);
+                DebugLogger.Log($"DownloadConfigManager created default download path: {defaultPath}");
                 return defaultPath;
             }
 
-            return File.ReadAllText(PathToConfig).Trim();
+            string path = File.ReadAllText(PathToConfig).Trim();
+            DebugLogger.Log($"DownloadConfigManager loaded path: {path}");
+            return path;
         }
 
         public static void Save(string path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(PathToConfig)!);
             File.WriteAllText(PathToConfig, path);
+            DebugLogger.Log($"DownloadConfigManager saved path: {path}");
         }
 
         public static string GetPath()

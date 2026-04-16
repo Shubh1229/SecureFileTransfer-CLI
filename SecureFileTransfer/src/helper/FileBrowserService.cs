@@ -1,4 +1,4 @@
-using System.IO;
+using SecureFileTransfer.src.logging;
 
 namespace SecureFileTransfer.src.helper
 {
@@ -6,11 +6,13 @@ namespace SecureFileTransfer.src.helper
     {
         public string? BrowseForFile(string startPath)
         {
+            DebugLogger.Log($"BrowseForFile called with startPath: {startPath}");
             return Browse(startPath, selectDirectoriesOnly: false);
         }
 
         public string? BrowseForDirectory(string startPath)
         {
+            DebugLogger.Log($"BrowseForDirectory called with startPath: {startPath}");
             return Browse(startPath, selectDirectoriesOnly: true);
         }
 
@@ -35,6 +37,7 @@ namespace SecureFileTransfer.src.helper
                 }
                 catch (Exception ex)
                 {
+                    DebugLogger.LogError("FileBrowserService.Browse", ex);
                     Console.WriteLine($"Unable to access directory: {ex.Message}");
                     Console.WriteLine("\nPress any key to go up...");
                     Console.ReadKey();
@@ -42,6 +45,7 @@ namespace SecureFileTransfer.src.helper
                     DirectoryInfo? parent = Directory.GetParent(currentPath);
                     if (parent == null)
                     {
+                        DebugLogger.Log("File browser reached top-level with no parent.");
                         return null;
                     }
 
@@ -88,9 +92,11 @@ namespace SecureFileTransfer.src.helper
                 Console.Write("\nChoose: ");
 
                 string input = (Console.ReadLine() ?? "").Trim();
+                DebugLogger.Log($"File browser input: '{input}' at path {currentPath}");
 
                 if (input.Equals("q", StringComparison.OrdinalIgnoreCase))
                 {
+                    DebugLogger.Log("File browser cancelled by user.");
                     return null;
                 }
 
@@ -106,6 +112,7 @@ namespace SecureFileTransfer.src.helper
 
                 if (selectDirectoriesOnly && input.Equals("s", StringComparison.OrdinalIgnoreCase))
                 {
+                    DebugLogger.Log($"Directory selected: {currentPath}");
                     return currentPath;
                 }
 
@@ -116,6 +123,7 @@ namespace SecureFileTransfer.src.helper
                     if (dirIndex >= 0 && dirIndex < directories.Length)
                     {
                         currentPath = directories[dirIndex];
+                        DebugLogger.Log($"Navigated into directory: {currentPath}");
                     }
                     continue;
                 }
@@ -127,6 +135,7 @@ namespace SecureFileTransfer.src.helper
                     fileIndex--;
                     if (fileIndex >= 0 && fileIndex < files.Length)
                     {
+                        DebugLogger.Log($"File selected: {files[fileIndex]}");
                         return files[fileIndex];
                     }
                 }

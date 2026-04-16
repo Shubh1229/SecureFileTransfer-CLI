@@ -13,8 +13,12 @@ namespace SecureFileTransfer.src.client
 
         public void StartClient(HostModel host)
         {
+            DebugLogger.Separator("CLIENT SESSION START");
+            DebugLogger.Log("Entered ClientService.StartClient");
+
             if (host.Peers.Length == 0)
             {
+                DebugLogger.Log("No peers saved. Exiting client start.");
                 Console.WriteLine("No peers saved.");
                 return;
             }
@@ -31,14 +35,17 @@ namespace SecureFileTransfer.src.client
 
             if (!parsed || index < 0 || index >= host.Peers.Length)
             {
+                DebugLogger.Log($"Invalid peer selection input: '{input}'");
                 Console.WriteLine("Invalid input...");
                 return;
             }
 
             PeersModel peer = host.Peers[index];
+            DebugLogger.Log($"Selected peer: {peer.PeerName} ({peer.IPv4})");
 
             if (string.IsNullOrWhiteSpace(peer.IPv4))
             {
+                DebugLogger.Log("Selected peer did not have a valid IPv4 address.");
                 Console.WriteLine("Selected peer does not have a valid IPv4 address.");
                 return;
             }
@@ -52,48 +59,59 @@ namespace SecureFileTransfer.src.client
 
             try
             {
+                DebugLogger.Log($"Attempting TCP connection to {peer.IPv4}:{PORT}");
                 using TcpClient tcpClient = new(peer.IPv4, PORT);
                 Console.WriteLine($"Connected to {peer.PeerName} at {peer.IPv4}:{PORT}");
+                DebugLogger.Log("TCP connection established.");
 
                 using NetworkStream stream = tcpClient.GetStream();
 
-                Console.WriteLine("Starting handshake...");
+                DebugLogger.Log("Starting client handshake.");
                 bool handshakeSuccess = ClientHandshake(host, stream);
                 if (!handshakeSuccess)
                 {
                     logger.FinishConnection(connectionLog, false);
+                    DebugLogger.Log("Client handshake failed.");
                     Console.WriteLine("Handshake failed...");
                     return;
                 }
 
+                DebugLogger.Log("Selecting files.");
                 List<string> selectedFiles = SelectFiles();
                 if (selectedFiles.Count == 0)
                 {
                     Console.WriteLine("No files selected.");
                     logger.FinishConnection(connectionLog, false);
+                    DebugLogger.Log("No files selected.");
                     return;
                 }
 
+                DebugLogger.Log($"Selected {selectedFiles.Count} file(s). Sending transfer plan.");
                 SendTransferPlan(stream, selectedFiles.Count);
 
                 foreach (string filePath in selectedFiles)
                 {
+                    DebugLogger.Log($"Sending file info for: {filePath}");
                     SendFileInfo(stream, filePath);
 
                     FileInfo fileStats = new(filePath);
                     logger.AddFileLog(connectionLog, fileStats.Name, fileStats.Length, true);
+                    DebugLogger.Log($"Logged file metadata: {fileStats.Name} ({fileStats.Length} bytes)");
                 }
 
                 logger.FinishConnection(connectionLog, true);
+                DebugLogger.Log("Client session completed successfully.");
             }
             catch (Exception ex)
             {
                 logger.FinishConnection(connectionLog, false);
+                DebugLogger.LogError("ClientService.StartClient", ex);
                 Console.WriteLine($"Could not set up client connection: {ex.Message}");
             }
             finally
             {
                 logger.SaveConnection(connectionLog);
+                DebugLogger.Log("Saved client connection log.");
                 Console.WriteLine("Client stopped...\nPress any key to continue");
                 Console.ReadKey();
                 Console.Clear();
@@ -108,12 +126,14 @@ namespace SecureFileTransfer.src.client
                 SenderIPv4 = host.IPv4,
                 SenderIPv6 = host.IPv6
             };
-            Console.WriteLine("Sending Handshake...");
+
+            DebugLogger.Log("Client sending handshake message.");
             MessageHelper.SendMessage(stream, handshake.ToJson());
 
             string? messageRead = MessageHelper.ReadMessage(stream);
             if (string.IsNullOrWhiteSpace(messageRead))
             {
+                DebugLogger.Log("Client never received handshake return.");
                 Console.WriteLine("Never received handshake return.");
                 return false;
             }
@@ -121,10 +141,12 @@ namespace SecureFileTransfer.src.client
             HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
             if (receivedHandshake == null)
             {
+                DebugLogger.Log("Client failed to parse handshake return.");
                 Console.WriteLine("Failed to parse handshake return.");
                 return false;
             }
 
+            DebugLogger.Log($"Handshake completed with {receivedHandshake.SenderName} ({receivedHandshake.SenderIPv4})");
             Console.WriteLine("Handshake completed.");
             Console.WriteLine($"Remote name: {receivedHandshake.SenderName}");
             Console.WriteLine($"Remote IPv4: {receivedHandshake.SenderIPv4}");
@@ -140,21 +162,26 @@ namespace SecureFileTransfer.src.client
             while (true)
             {
                 string startPath = FindFileConfigManager.Load();
+                DebugLogger.Log($"Opening file browser at: {startPath}");
+
                 string? selectedFile = fileBrowser.BrowseForFile(startPath);
 
                 if (selectedFile == null)
                 {
+                    DebugLogger.Log("File browser returned null/cancelled.");
                     break;
                 }
 
                 if (!selectedFiles.Contains(selectedFile))
                 {
                     selectedFiles.Add(selectedFile);
+                    DebugLogger.Log($"Added file to send list: {selectedFile}");
 
                     string? parent = Path.GetDirectoryName(selectedFile);
                     if (!string.IsNullOrWhiteSpace(parent))
                     {
                         FindFileConfigManager.Save(parent);
+                        DebugLogger.Log($"Saved last browse path: {parent}");
                     }
                 }
 
@@ -164,6 +191,7 @@ namespace SecureFileTransfer.src.client
 
                 if (answer != "y")
                 {
+                    DebugLogger.Log("User chose not to add more files.");
                     break;
                 }
             }
@@ -181,6 +209,7 @@ namespace SecureFileTransfer.src.client
             string json = JsonSerializer.Serialize(plan);
             MessageHelper.SendMessage(stream, json);
 
+            DebugLogger.Log($"Sent transfer plan for {fileCount} file(s).");
             Console.WriteLine($"Sent transfer plan for {fileCount} file(s).");
         }
 
@@ -199,6 +228,7 @@ namespace SecureFileTransfer.src.client
             string json = JsonSerializer.Serialize(file);
             MessageHelper.SendMessage(stream, json);
 
+            DebugLogger.Log($"Sent file info: {file.FileName}, {file.FileSizeBytes} bytes");
             Console.WriteLine("Sent file info:");
             Console.WriteLine($"Name: {file.FileName}");
             Console.WriteLine($"Size: {file.FileSizeBytes}");

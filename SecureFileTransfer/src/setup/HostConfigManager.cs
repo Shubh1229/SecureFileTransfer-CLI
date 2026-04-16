@@ -1,4 +1,5 @@
 using SecureFileTransfer.src.data_structures;
+using SecureFileTransfer.src.logging;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -11,6 +12,8 @@ namespace SecureFileTransfer.src.setup
 
         public static HostModel Load()
         {
+            DebugLogger.Log($"HostConfigManager loading host config from: {PathToConfig}");
+
             string yaml = File.ReadAllText(PathToConfig);
 
             var deserializer = new DeserializerBuilder()
@@ -23,6 +26,7 @@ namespace SecureFileTransfer.src.setup
             host.Peers ??= Array.Empty<PeersModel>();
             host.IPv6 ??= "";
 
+            DebugLogger.Log($"HostConfigManager loaded host: {host.HostName} ({host.IPv4})");
             return host;
         }
 
@@ -36,6 +40,8 @@ namespace SecureFileTransfer.src.setup
 
             Directory.CreateDirectory(Path.GetDirectoryName(PathToConfig)!);
             File.WriteAllText(PathToConfig, yaml);
+
+            DebugLogger.Log($"HostConfigManager saved host config for: {host.HostName} ({host.IPv4})");
         }
 
         public static string GetPath()

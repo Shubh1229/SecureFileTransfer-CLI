@@ -1,3 +1,5 @@
+using SecureFileTransfer.src.logging;
+
 namespace SecureFileTransfer.src.setup
 {
     public static class FindFileConfigManager
@@ -15,16 +17,20 @@ namespace SecureFileTransfer.src.setup
                 );
 
                 Save(defaultPath);
+                DebugLogger.Log($"FindFileConfigManager created default browse path: {defaultPath}");
                 return defaultPath;
             }
 
-            return File.ReadAllText(PathToConfig).Trim();
+            string path = File.ReadAllText(PathToConfig).Trim();
+            DebugLogger.Log($"FindFileConfigManager loaded path: {path}");
+            return path;
         }
 
         public static void Save(string path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(PathToConfig)!);
             File.WriteAllText(PathToConfig, path);
+            DebugLogger.Log($"FindFileConfigManager saved path: {path}");
         }
 
         public static string GetPath()
