@@ -57,10 +57,12 @@ namespace SecureFileTransfer.src.client
 
                 using NetworkStream stream = tcpClient.GetStream();
 
+                Console.WriteLine("Starting handshake...");
                 bool handshakeSuccess = ClientHandshake(host, stream);
                 if (!handshakeSuccess)
                 {
                     logger.FinishConnection(connectionLog, false);
+                    Console.WriteLine("Handshake failed...");
                     return;
                 }
 
@@ -106,7 +108,7 @@ namespace SecureFileTransfer.src.client
                 SenderIPv4 = host.IPv4,
                 SenderIPv6 = host.IPv6
             };
-
+            Console.WriteLine("Sending Handshake...");
             MessageHelper.SendMessage(stream, handshake.ToJson());
 
             string? messageRead = MessageHelper.ReadMessage(stream);
