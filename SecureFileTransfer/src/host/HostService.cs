@@ -102,10 +102,22 @@ namespace SecureFileTransfer.src.host
                         return;
                     }
 
-                    logger.AddFileLog(connection, incomingFile.FileName, incomingFile.FileSizeBytes, true);
-
                     string filePath = Path.Combine(selectedDownloadPath, incomingFile.SuggestedSaveName);
                     DebugLogger.Log($"Prepared destination path for incoming file: {filePath}");
+
+                    bool fileReceived = ReceiveFileBytes(stream, filePath, incomingFile.FileSizeBytes);
+
+                    logger.AddFileLog(connection, incomingFile.FileName, incomingFile.FileSizeBytes, fileReceived);
+
+                    if (!fileReceived)
+                    {
+                        logger.FinishConnection(connection, false);
+                        logger.SaveConnection(connection);
+                        DebugLogger.Log($"File byte transfer failed for: {incomingFile.FileName}");
+                        return;
+                    }
+
+                    DebugLogger.Log($"Completed file receive for: {incomingFile.FileName}");
                 }
 
                 logger.FinishConnection(connection, true);
@@ -130,6 +142,57 @@ namespace SecureFileTransfer.src.host
                 Console.WriteLine("Host stopped...\nPress any key to continue");
                 Console.ReadKey();
                 Console.Clear();
+            }
+        }
+
+        private bool ReceiveFileBytes(NetworkStream stream, string destinationPath, long fileSizeBytes)
+        {
+            const int BUFFER_SIZE = 8192;
+
+            try
+            {
+                string? directory = Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                using FileStream fileStream = new(
+                    destinationPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None
+                );
+
+                byte[] buffer = new byte[BUFFER_SIZE];
+                long remaining = fileSizeBytes;
+                long totalWritten = 0;
+
+                while (remaining > 0)
+                {
+                    int bytesToRead = (int)Math.Min(buffer.Length, remaining);
+                    int bytesRead = stream.Read(buffer, 0, bytesToRead);
+
+                    if (bytesRead == 0)
+                    {
+                        DebugLogger.Log($"ReceiveFileBytes hit EOF early. Remaining={remaining}");
+                        return false;
+                    }
+
+                    fileStream.Write(buffer, 0, bytesRead);
+                    remaining -= bytesRead;
+                    totalWritten += bytesRead;
+                    Console.Write($"\rReceiving: {totalWritten}/{fileSizeBytes} bytes");
+                }
+
+                fileStream.Flush();
+                DebugLogger.Log($"Received {totalWritten} bytes into: {destinationPath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogError($"HostService.ReceiveFileBytes ({destinationPath})", ex);
+                return false;
             }
         }
 

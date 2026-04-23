@@ -94,9 +94,20 @@ namespace SecureFileTransfer.src.client
                     DebugLogger.Log($"Sending file info for: {filePath}");
                     SendFileInfo(stream, filePath);
 
+                    DebugLogger.Log($"Starting file byte transfer for: {filePath}");
+                    bool fileSent = SendFileBytes(stream, filePath);
+
                     FileInfo fileStats = new(filePath);
-                    logger.AddFileLog(connectionLog, fileStats.Name, fileStats.Length, true);
                     DebugLogger.Log($"Logged file metadata: {fileStats.Name} ({fileStats.Length} bytes)");
+
+                    if (!fileSent)
+                    {
+                        DebugLogger.Log($"File byte transfer failed for: {filePath}");
+                        logger.FinishConnection(connectionLog, false);
+                        return;
+                    }
+                    logger.AddFileLog(connectionLog, fileStats.Name, fileStats.Length, true);
+                    DebugLogger.Log($"Completed file byte transfer for: {filePath}");
                 }
 
                 logger.FinishConnection(connectionLog, true);
@@ -115,6 +126,41 @@ namespace SecureFileTransfer.src.client
                 Console.WriteLine("Client stopped...\nPress any key to continue");
                 Console.ReadKey();
                 Console.Clear();
+            }
+        }
+
+        private bool SendFileBytes(NetworkStream stream, string selectedFile)
+        {
+            const int BUFFER_SIZE = 8192;
+
+            try
+            {
+                using FileStream fileStream = new(
+                    selectedFile,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read
+                );
+
+                byte[] buffer = new byte[BUFFER_SIZE];
+                int bytesRead;
+                long totalSent = 0;
+
+                while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    stream.Write(buffer, 0, bytesRead);
+                    totalSent += bytesRead;
+                }
+
+                stream.Flush();
+
+                DebugLogger.Log($"Sent {totalSent} bytes for file: {selectedFile}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogError($"ClientService.SendFileBytes ({selectedFile})", ex);
+                return false;
             }
         }
 
