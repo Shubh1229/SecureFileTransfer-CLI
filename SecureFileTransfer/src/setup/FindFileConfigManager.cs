@@ -4,11 +4,12 @@ namespace SecureFileTransfer.src.setup
 {
     public static class FindFileConfigManager
     {
-        private static readonly string PathToConfig =
-            Path.Combine(Directory.GetCurrentDirectory(), "data", ".data", "find_file_path.txt");
+        private static readonly string PathToConfig = AppPaths.FindFilePathConfig;
 
         public static string Load()
         {
+            AppPaths.EnsureAppDirectoryExists();
+
             if (!File.Exists(PathToConfig))
             {
                 string defaultPath = Path.Combine(
@@ -28,7 +29,7 @@ namespace SecureFileTransfer.src.setup
 
         public static void Save(string path)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(PathToConfig)!);
+            AppPaths.EnsureAppDirectoryExists();
             File.WriteAllText(PathToConfig, path);
             DebugLogger.Log($"FindFileConfigManager saved path: {path}");
         }

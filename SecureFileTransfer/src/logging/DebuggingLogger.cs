@@ -1,13 +1,14 @@
+using SecureFileTransfer.src.setup;
+
 namespace SecureFileTransfer.src.logging
 {
     public static class DebugLogger
     {
-        private static readonly string PathToLog =
-            Path.Combine(Directory.GetCurrentDirectory(), "data", ".data", "debug.log");
+        private static readonly string PathToLog = AppPaths.DebugLogPath;
 
         public static void Log(string message)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(PathToLog)!);
+            AppPaths.EnsureAppDirectoryExists();
 
             string line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC] {message}";
             File.AppendAllText(PathToLog, line + Environment.NewLine);
@@ -15,7 +16,7 @@ namespace SecureFileTransfer.src.logging
 
         public static void LogError(string context, Exception ex)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(PathToLog)!);
+            AppPaths.EnsureAppDirectoryExists();
 
             string line =
                 $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC] ERROR in {context}: {ex.Message}{Environment.NewLine}{ex}";
@@ -27,6 +28,7 @@ namespace SecureFileTransfer.src.logging
         {
             return PathToLog;
         }
+
         public static void Separator(string title = "")
         {
             Log(string.IsNullOrWhiteSpace(title)
