@@ -48,6 +48,7 @@ namespace SecureFileTransfer.src.host
             TcpListener tcp = new(ipAddress, PORT);
             TransferLogging logger = new();
             ConnectionLogModel? connection = null;
+            bool connectionSaved = false;
 
             try
             {
@@ -60,6 +61,7 @@ namespace SecureFileTransfer.src.host
                 Console.WriteLine("Client connected!");
 
                 IPEndPoint? remoteEndPoint = client.Client.RemoteEndPoint as IPEndPoint;
+
                 if (remoteEndPoint != null)
                 {
                     DebugLogger.Log($"Remote endpoint: {remoteEndPoint.Address}:{remoteEndPoint.Port}");
@@ -70,6 +72,7 @@ namespace SecureFileTransfer.src.host
 
                 DebugLogger.Log("Starting host handshake.");
                 connection = HandshakeProtocol.ReadHandshake(host, stream);
+
                 if (connection == null)
                 {
                     DebugLogger.Log("Host handshake returned null.");
@@ -79,21 +82,32 @@ namespace SecureFileTransfer.src.host
                     return;
                 }
 
+                DebugLogger.Log("Starting host key exchange.");
                 SessionKeyModel sessionKey = KeyExchangeProtocol.RunHost(stream);
 
                 if (!sessionKey.IsEstablished)
                 {
                     logger.FinishConnection(connection, false);
+                    logger.SaveConnection(connection);
+                    connectionSaved = true;
+
+                    DebugLogger.Log("Host key exchange failed.");
                     Console.WriteLine("Key exchange failed...");
                     return;
                 }
 
-                TransferPlanModel? plan = TransferPlanProtocol.Read(stream);
+                DebugLogger.Log("Host key exchange completed successfully.");
+
+                DebugLogger.Log("Waiting for encrypted transfer plan.");
+                TransferPlanModel? plan = TransferPlanProtocol.Read(stream, sessionKey);
+
                 if (plan == null)
                 {
                     logger.FinishConnection(connection, false);
                     logger.SaveConnection(connection);
-                    DebugLogger.Log("Transfer plan was null. Ending host session.");
+                    connectionSaved = true;
+
+                    DebugLogger.Log("Encrypted transfer plan was null. Ending host session.");
                     return;
                 }
 
@@ -102,44 +116,63 @@ namespace SecureFileTransfer.src.host
 
                 for (int i = 0; i < plan.FileCount; i++)
                 {
-                    DebugLogger.Log($"Reading file info #{i + 1} of {plan.FileCount}");
-                    FileInfoModel? incomingFile = FileInfoProtocol.Read(stream);
+                    DebugLogger.Log($"Reading encrypted file info #{i + 1} of {plan.FileCount}");
+                    FileInfoModel? incomingFile = FileInfoProtocol.Read(stream, sessionKey);
+
                     if (incomingFile == null)
                     {
                         logger.FinishConnection(connection, false);
                         logger.SaveConnection(connection);
-                        DebugLogger.Log("Incoming file info was null. Ending host session.");
+                        connectionSaved = true;
+
+                        DebugLogger.Log("Encrypted incoming file info was null. Ending host session.");
                         return;
                     }
 
                     string filePath = Path.Combine(selectedDownloadPath, incomingFile.SuggestedSaveName);
                     DebugLogger.Log($"Prepared destination path for incoming file: {filePath}");
 
-                    bool fileReceived = FileTransferProtocol.Read(stream, filePath, incomingFile.FileSizeBytes, sessionKey);
+                    DebugLogger.Log($"Starting encrypted file receive for: {incomingFile.FileName}");
+                    bool fileReceived = FileTransferProtocol.Read(
+                        stream,
+                        filePath,
+                        incomingFile.FileSizeBytes,
+                        sessionKey
+                    );
 
-                    logger.AddFileLog(connection, incomingFile.FileName, incomingFile.FileSizeBytes, fileReceived);
+                    logger.AddFileLog(
+                        connection,
+                        incomingFile.FileName,
+                        incomingFile.FileSizeBytes,
+                        fileReceived
+                    );
 
                     if (!fileReceived)
                     {
                         logger.FinishConnection(connection, false);
                         logger.SaveConnection(connection);
-                        DebugLogger.Log($"File byte transfer failed for: {incomingFile.FileName}");
+                        connectionSaved = true;
+
+                        DebugLogger.Log($"Encrypted file byte transfer failed for: {incomingFile.FileName}");
                         return;
                     }
 
-                    DebugLogger.Log($"Completed file receive for: {incomingFile.FileName}");
+                    DebugLogger.Log($"Completed encrypted file receive for: {incomingFile.FileName}");
                 }
 
                 logger.FinishConnection(connection, true);
                 logger.SaveConnection(connection);
+                connectionSaved = true;
+
                 DebugLogger.Log("Host session completed successfully.");
             }
             catch (Exception ex)
             {
-                if (connection != null)
+                if (connection != null && !connectionSaved)
                 {
                     logger.FinishConnection(connection, false);
                     logger.SaveConnection(connection);
+                    connectionSaved = true;
                 }
 
                 DebugLogger.LogError("HostService.StartHost", ex);

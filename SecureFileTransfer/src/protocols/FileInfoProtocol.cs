@@ -1,18 +1,18 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
 using System.Text.Json;
-using System.Threading.Tasks;
 using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
+using SecureFileTransfer.src.security;
 
 namespace SecureFileTransfer.src.protocols
 {
-    public class FileInfoProtocol
+    public static class FileInfoProtocol
     {
-        public static void Send(NetworkStream stream, string selectedFile)
+        public static void Send(
+            NetworkStream stream,
+            string selectedFile,
+            SessionKeyModel sessionKey)
         {
             FileInfo fileStats = new(selectedFile);
 
@@ -25,22 +25,27 @@ namespace SecureFileTransfer.src.protocols
             };
 
             string json = JsonSerializer.Serialize(file);
-            MessageHelper.SendMessage(stream, json);
 
-            DebugLogger.Log($"Sent file info: {file.FileName}, {file.FileSizeBytes} bytes");
+            MessageHelper.SendEncryptedMessage(stream, json, sessionKey);
+
+            DebugLogger.Log($"Sent encrypted file info: {file.FileName}, {file.FileSizeBytes} bytes");
+
             Console.WriteLine("Sent file info:");
             Console.WriteLine($"Name: {file.FileName}");
             Console.WriteLine($"Size: {file.FileSizeBytes}");
         }
 
-        public static FileInfoModel? Read(NetworkStream stream)
+        public static FileInfoModel? Read(
+            NetworkStream stream,
+            SessionKeyModel sessionKey)
         {
-            DebugLogger.Log("Host waiting for file info.");
-            string? json = MessageHelper.ReadMessage(stream);
+            DebugLogger.Log("Host waiting for encrypted file info.");
+
+            string? json = MessageHelper.ReadEncryptedMessage(stream, sessionKey);
 
             if (string.IsNullOrWhiteSpace(json))
             {
-                DebugLogger.Log("No file info received.");
+                DebugLogger.Log("No encrypted file info received.");
                 Console.WriteLine("No file info received.");
                 return null;
             }
@@ -49,12 +54,13 @@ namespace SecureFileTransfer.src.protocols
 
             if (fileInfo == null)
             {
-                DebugLogger.Log("Failed to deserialize file info.");
+                DebugLogger.Log("Failed to deserialize encrypted file info.");
                 Console.WriteLine("Failed to deserialize file info.");
                 return null;
             }
 
-            DebugLogger.Log($"Received file info: {fileInfo.FileName}, {fileInfo.FileSizeBytes} bytes");
+            DebugLogger.Log($"Received encrypted file info: {fileInfo.FileName}, {fileInfo.FileSizeBytes} bytes");
+
             Console.WriteLine("\nIncoming file info:");
             Console.WriteLine($"Name: {fileInfo.FileName}");
             Console.WriteLine($"Size: {fileInfo.FileSizeBytes} bytes");

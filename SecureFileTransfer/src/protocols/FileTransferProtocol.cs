@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
-using System.Threading.Tasks;
+using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
 using SecureFileTransfer.src.security;
 
@@ -10,12 +7,18 @@ namespace SecureFileTransfer.src.protocols
 {
     public static class FileTransferProtocol
     {
-        private static readonly int BUFFER_SIZE = 8192;
+        private const int BUFFER_SIZE = 8192;
+
         public static bool Send(NetworkStream stream, string selectedFile, SessionKeyModel sessionKey)
         {
-
             try
             {
+                if (!sessionKey.IsEstablished)
+                {
+                    DebugLogger.Log("FileTransferProtocol.Send failed: session key not established.");
+                    return false;
+                }
+
                 using FileStream fileStream = new(
                     selectedFile,
                     FileMode.Open,
@@ -25,34 +28,50 @@ namespace SecureFileTransfer.src.protocols
 
                 byte[] buffer = new byte[BUFFER_SIZE];
                 int bytesRead;
-                long totalSent = 0;
+                long totalPlainBytesSent = 0;
+                int chunkCount = 0;
 
                 while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    byte[] encryptedBuffer = EncryptionService.Encrypt(buffer, sessionKey.Key);
-                    stream.Write(encryptedBuffer, 0, bytesRead);
-                    totalSent += bytesRead;
+                    byte[] plainChunk = buffer[..bytesRead];
+                    byte[] encryptedChunk = EncryptionService.Encrypt(plainChunk, sessionKey.Key);
+
+                    MessageHelper.SendBytesWithLengthPrefix(stream, encryptedChunk);
+
+                    totalPlainBytesSent += bytesRead;
+                    chunkCount++;
+
+                    Console.Write($"\rSending: {totalPlainBytesSent}/{fileStream.Length} bytes");
                 }
 
                 stream.Flush();
+                Console.WriteLine();
 
-                DebugLogger.Log($"Sent {totalSent} bytes for file: {selectedFile}");
+                DebugLogger.Log(
+                    $"Sent encrypted file: {selectedFile}. plainBytes={totalPlainBytesSent}, chunks={chunkCount}"
+                );
+
                 return true;
             }
             catch (Exception ex)
             {
-                DebugLogger.LogError($"ClientService.SendFileBytes ({selectedFile})", ex);
+                DebugLogger.LogError($"FileTransferProtocol.Send ({selectedFile})", ex);
                 return false;
             }
         }
 
         public static bool Read(NetworkStream stream, string destinationPath, long fileSizeBytes, SessionKeyModel sessionKey)
         {
-            const int BUFFER_SIZE = 8192;
-
             try
             {
+                if (!sessionKey.IsEstablished)
+                {
+                    DebugLogger.Log("FileTransferProtocol.Read failed: session key not established.");
+                    return false;
+                }
+
                 string? directory = Path.GetDirectoryName(destinationPath);
+
                 if (!string.IsNullOrWhiteSpace(directory))
                 {
                     Directory.CreateDirectory(directory);
@@ -65,36 +84,53 @@ namespace SecureFileTransfer.src.protocols
                     FileShare.None
                 );
 
-                byte[] buffer = new byte[BUFFER_SIZE];
-                long remaining = fileSizeBytes;
-                long totalWritten = 0;
+                long totalPlainBytesWritten = 0;
+                int chunkCount = 0;
 
-                while (remaining > 0)
+                while (totalPlainBytesWritten < fileSizeBytes)
                 {
-                    int bytesToRead = (int)Math.Min(buffer.Length, remaining);
-                    int bytesRead = stream.Read(buffer, 0, bytesToRead);
+                    byte[]? encryptedChunk = MessageHelper.ReadBytesWithLengthPrefix(stream);
 
-                    if (bytesRead == 0)
+                    if (encryptedChunk == null)
                     {
-                        DebugLogger.Log($"ReceiveFileBytes hit EOF early. Remaining={remaining}");
+                        DebugLogger.Log(
+                            $"FileTransferProtocol.Read failed: encrypted chunk was null. written={totalPlainBytesWritten}, expected={fileSizeBytes}"
+                        );
+
                         return false;
                     }
 
-                    byte[] decryptedBuffer = EncryptionService.Decrypt(buffer, sessionKey.Key);
+                    byte[] plainChunk = EncryptionService.Decrypt(encryptedChunk, sessionKey.Key);
 
-                    fileStream.Write(decryptedBuffer, 0, bytesRead);
-                    remaining -= bytesRead;
-                    totalWritten += bytesRead;
-                    Console.Write($"\rReceiving: {totalWritten}/{fileSizeBytes} bytes");
+                    if (totalPlainBytesWritten + plainChunk.Length > fileSizeBytes)
+                    {
+                        DebugLogger.Log(
+                            $"FileTransferProtocol.Read failed: decrypted bytes exceed expected file size. written={totalPlainBytesWritten}, chunk={plainChunk.Length}, expected={fileSizeBytes}"
+                        );
+
+                        return false;
+                    }
+
+                    fileStream.Write(plainChunk, 0, plainChunk.Length);
+
+                    totalPlainBytesWritten += plainChunk.Length;
+                    chunkCount++;
+
+                    Console.Write($"\rReceiving: {totalPlainBytesWritten}/{fileSizeBytes} bytes");
                 }
 
                 fileStream.Flush();
-                DebugLogger.Log($"Received {totalWritten} bytes into: {destinationPath}");
+                Console.WriteLine();
+
+                DebugLogger.Log(
+                    $"Received encrypted file into: {destinationPath}. plainBytes={totalPlainBytesWritten}, chunks={chunkCount}"
+                );
+
                 return true;
             }
             catch (Exception ex)
             {
-                DebugLogger.LogError($"HostService.ReceiveFileBytes ({destinationPath})", ex);
+                DebugLogger.LogError($"FileTransferProtocol.Read ({destinationPath})", ex);
                 return false;
             }
         }

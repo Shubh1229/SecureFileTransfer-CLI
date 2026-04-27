@@ -60,27 +60,42 @@ namespace SecureFileTransfer.src.client
 
             DebugLogger.Log("Selecting files.");
             List<string> selectedFiles = SelectFiles();
+
             if (selectedFiles.Count == 0)
             {
                 Console.WriteLine("No files selected.");
                 logger.FinishConnection(connectionLog, false);
-                DebugLogger.Log("No files selected.");
                 logger.SaveConnection(connectionLog);
+                DebugLogger.Log("No files selected. Client session ending.");
                 return;
             }
-
 
             try
             {
                 DebugLogger.Log($"Attempting TCP connection to {peer.IPv4}:{PORT}");
-                using TcpClient tcpClient = new(peer.IPv4, PORT);
+                using TcpClient tcpClient = new();
+
+                var connectTask = tcpClient.ConnectAsync(peer.IPv4, PORT);
+
+                if (!connectTask.Wait(TimeSpan.FromSeconds(30)))
+                {
+                    DebugLogger.Log("Client connection timed out after 30 seconds.");
+                    Console.WriteLine("Connection timed out.");
+                    logger.FinishConnection(connectionLog, false);
+                    logger.SaveConnection(connectionLog);
+                    return;
+                }
+
                 Console.WriteLine($"Connected to {peer.PeerName} at {peer.IPv4}:{PORT}");
                 DebugLogger.Log("TCP connection established.");
 
                 using NetworkStream stream = tcpClient.GetStream();
+                stream.ReadTimeout = 30000;
+                stream.WriteTimeout = 30000;
 
                 DebugLogger.Log("Starting client handshake.");
                 bool handshakeSuccess = HandshakeProtocol.SendHandShake(host, stream);
+
                 if (!handshakeSuccess)
                 {
                     logger.FinishConnection(connectionLog, false);
@@ -89,36 +104,43 @@ namespace SecureFileTransfer.src.client
                     return;
                 }
 
+                DebugLogger.Log("Starting client key exchange.");
                 SessionKeyModel sessionKey = KeyExchangeProtocol.RunClient(stream);
 
                 if (!sessionKey.IsEstablished)
                 {
+                    logger.FinishConnection(connectionLog, false);
+                    DebugLogger.Log("Client key exchange failed.");
                     Console.WriteLine("Key exchange failed...");
                     return;
                 }
 
-                DebugLogger.Log($"Selected {selectedFiles.Count} file(s). Sending transfer plan.");
-                TransferPlanProtocol.Send(stream, selectedFiles.Count);
+                DebugLogger.Log("Client key exchange completed successfully.");
+
+                DebugLogger.Log($"Selected {selectedFiles.Count} file(s). Sending encrypted transfer plan.");
+                TransferPlanProtocol.Send(stream, selectedFiles.Count, sessionKey);
 
                 foreach (string filePath in selectedFiles)
                 {
-                    DebugLogger.Log($"Sending file info for: {filePath}");
-                    FileInfoProtocol.Send(stream, filePath);
+                    FileInfo fileStats = new(filePath);
 
-                    DebugLogger.Log($"Starting file byte transfer for: {filePath}");
+                    DebugLogger.Log($"Sending encrypted file info for: {filePath}");
+                    FileInfoProtocol.Send(stream, filePath, sessionKey);
+
+                    DebugLogger.Log($"Starting encrypted file byte transfer for: {filePath}");
                     bool fileSent = FileTransferProtocol.Send(stream, filePath, sessionKey);
 
-                    FileInfo fileStats = new(filePath);
                     DebugLogger.Log($"Logged file metadata: {fileStats.Name} ({fileStats.Length} bytes)");
 
                     if (!fileSent)
                     {
-                        DebugLogger.Log($"File byte transfer failed for: {filePath}");
+                        DebugLogger.Log($"Encrypted file byte transfer failed for: {filePath}");
                         logger.FinishConnection(connectionLog, false);
                         return;
                     }
+
                     logger.AddFileLog(connectionLog, fileStats.Name, fileStats.Length, true);
-                    DebugLogger.Log($"Completed file byte transfer for: {filePath}");
+                    DebugLogger.Log($"Completed encrypted file byte transfer for: {filePath}");
                 }
 
                 logger.FinishConnection(connectionLog, true);
@@ -139,7 +161,6 @@ namespace SecureFileTransfer.src.client
                 Console.Clear();
             }
         }
-
 
         private List<string> SelectFiles()
         {
@@ -174,6 +195,7 @@ namespace SecureFileTransfer.src.client
 
                 Console.WriteLine($"\nAdded: {selectedFile}");
                 Console.Write("Add another file? (y/n): ");
+
                 string answer = (Console.ReadLine() ?? "").Trim().ToLower();
 
                 if (answer != "y")
