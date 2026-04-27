@@ -1,101 +1,106 @@
-﻿using SecureFileTransfer.src.client;
-using SecureFileTransfer.src.data_structures;
-using SecureFileTransfer.src.host;
-using SecureFileTransfer.src.logging;
-using SecureFileTransfer.src.setup;
+﻿using SecureFileTransfer.src.start;
 
-DebugLogger.Separator("PROGRAM START");
-DebugLogger.Log("Program.cs entered.");
+var cli = new StartSFT_CLI();
 
-Console.Clear();
 
-string path = Path.Combine(Directory.GetCurrentDirectory(), "data", ".data", "host.yaml");
-DebugLogger.Log($"Checking for host config at: {path}");
+// using SecureFileTransfer.src.client;
+// using SecureFileTransfer.src.data_structures;
+// using SecureFileTransfer.src.host;
+// using SecureFileTransfer.src.logging;
+// using SecureFileTransfer.src.setup;
 
-if (!File.Exists(path))
-{
-    DebugLogger.Log("Host config not found. Running Initialize.");
-    new Initialize();
-}
+// DebugLogger.Separator("PROGRAM START");
+// DebugLogger.Log("Program.cs entered.");
 
-HostModel host = HostConfigManager.Load();
-DebugLogger.Log($"Loaded host config for {host.HostName} ({host.IPv4})");
+// Console.Clear();
 
-string menu =
-"""
-Secure File Transfer
-1. View host info
-2. Manage peers
-3. Start host
-4. Start client
-5. Re-run setup
-6. Exit
-""";
+// string path = Path.Combine(Directory.GetCurrentDirectory(), "data", ".data", "host.yaml");
+// DebugLogger.Log($"Checking for host config at: {path}");
 
-Console.WriteLine(menu + "\n");
+// if (!File.Exists(path))
+// {
+//     DebugLogger.Log("Host config not found. Running Initialize.");
+//     new Initialize();
+// }
 
-while (true)
-{
-    string? option = Console.ReadLine();
+// HostModel host = HostConfigManager.Load();
+// DebugLogger.Log($"Loaded host config for {host.HostName} ({host.IPv4})");
 
-    if (option == null || option.Length > 1 || !char.IsDigit(option[0]))
-    {
-        DebugLogger.Log($"Invalid menu input: '{option}'");
-        Console.WriteLine("You Must Give a Valid Input...\nPress any key to continue");
-        Console.ReadKey();
-        Console.Clear();
-        Console.WriteLine(menu + "\n");
-        continue;
-    }
+// string menu =
+// """
+// Secure File Transfer
+// 1. View host info
+// 2. Manage peers
+// 3. Start host
+// 4. Start client
+// 5. Re-run setup
+// 6. Exit
+// """;
 
-    int choice = int.Parse(option);
-    DebugLogger.Log($"Menu choice selected: {choice}");
+// Console.WriteLine(menu + "\n");
 
-    switch (choice)
-    {
-        case 1:
-            Console.Clear();
-            host.PrintInfo();
-            break;
+// while (true)
+// {
+//     string? option = Console.ReadLine();
 
-        case 2:
-            Console.Clear();
-            ManagePeers mhp = new();
-            host = mhp.ManageHostPeers(host);
-            DebugLogger.Log("Returned from ManagePeers.");
-            break;
+//     if (option == null || option.Length > 1 || !char.IsDigit(option[0]))
+//     {
+//         DebugLogger.Log($"Invalid menu input: '{option}'");
+//         Console.WriteLine("You Must Give a Valid Input...\nPress any key to continue");
+//         Console.ReadKey();
+//         Console.Clear();
+//         Console.WriteLine(menu + "\n");
+//         continue;
+//     }
 
-        case 3:
-            HostService service = new();
-            service.StartHost(host);
-            DebugLogger.Log("Returned from HostService.StartHost.");
-            break;
+//     int choice = int.Parse(option);
+//     DebugLogger.Log($"Menu choice selected: {choice}");
 
-        case 4:
-            ClientService client = new();
-            client.StartClient(host);
-            DebugLogger.Log("Returned from ClientService.StartClient.");
-            break;
+//     switch (choice)
+//     {
+//         case 1:
+//             Console.Clear();
+//             host.PrintInfo();
+//             break;
 
-        case 5:
-            Console.Clear();
-            DebugLogger.Log("Re-running Initialize from menu.");
-            new Initialize();
-            break;
+//         case 2:
+//             Console.Clear();
+//             ManagePeers mhp = new();
+//             host = mhp.ManageHostPeers(host);
+//             DebugLogger.Log("Returned from ManagePeers.");
+//             break;
 
-        case 6:
-        default:
-            Console.Clear();
-            HostConfigManager.Save(host);
-            DebugLogger.Log("Saved host config and exiting program.");
-            Environment.Exit(0);
-            break;
-    }
+//         case 3:
+//             HostService service = new();
+//             service.StartHost(host);
+//             DebugLogger.Log("Returned from HostService.StartHost.");
+//             break;
 
-    Console.WriteLine("\nPress any key to continue");
-    Console.ReadKey();
-    Console.Clear();
-    Console.WriteLine(menu + "\n\n");
-}
+//         case 4:
+//             ClientService client = new();
+//             client.StartClient(host);
+//             DebugLogger.Log("Returned from ClientService.StartClient.");
+//             break;
+
+//         case 5:
+//             Console.Clear();
+//             DebugLogger.Log("Re-running Initialize from menu.");
+//             new Initialize();
+//             break;
+
+//         case 6:
+//         default:
+//             Console.Clear();
+//             HostConfigManager.Save(host);
+//             DebugLogger.Log("Saved host config and exiting program.");
+//             Environment.Exit(0);
+//             break;
+//     }
+
+//     Console.WriteLine("\nPress any key to continue");
+//     Console.ReadKey();
+//     Console.Clear();
+//     Console.WriteLine(menu + "\n\n");
+// }
 
 
