@@ -1,140 +1,105 @@
 # SecureFileTransfer CLI
 
-A cross-platform CLI tool built in .NET (C#) for securely transferring files between computers over a local network.
+Tired of emailing yourself files or using other roundabout means that limit file sizes you can transfer? Well, here is a cross-platform command-line tool (GUI in being worked on) built in C# (.NET) for securely transferring files between machines on a local network (IPv6 is also being worked on so you can transfer files from different networks too).
 
----
+## Overview
 
-## 🚀 Overview
+SecureFileTransfer allows two computers to connect directly and send files between each other. It keeps track of connections, stores known peers, and logs transfer history. The project is designed with a modular structure so features like encryption and a GUI can be added later without major changes.
 
-SecureFileTransfer is a command-line application designed to allow two machines to:
+## Features
 
-- Establish a direct connection over IPv4/IPv6
-- Transfer files between each other
-- Track detailed logs of file transfers and connection sessions
-- Manage known peers for quick access
+- Peer-to-peer file transfer over TCP
+- Cross-platform support (macOS, Linux, Windows)
+- Encrypted file transfer using ECDH and AES-GCM
+- Multi-file transfer support
+- Persistent peer list
+- Transfer history logging
 
-The project is built from the ground up with a focus on:
-- modular design
-- clean architecture
-- future extensibility (encryption, protocol design, etc.)
+## How It Works
 
----
+1. One machine starts in host mode and listens for connections
+2. Another machine starts in client mode and connects to the host
+3. A handshake and key exchange are performed
+4. Files are transferred securely using encrypted chunks
+5. Transfer results are logged locally
 
-## 🎯 Goals
-
-### Core Goals
-- Build a cross-platform CLI tool (Mac, Windows, Linux)
-- Enable peer-to-peer file transfer
-- Store persistent configuration and peer data
-- Implement structured logging
-
-### Future Goals
-- End-to-end encryption
-- Custom transfer protocol
-- IPv6-first support
-- Automatic peer discovery
-- Resume interrupted transfers
-
----
-
-## 🧱 Project Structure
+## Project Structure
 
 SecureFileTransfer/
-├── Program.cs
-├── data/
-│   └── .data/
-│       ├── host.yaml
-│       └── transfer_logs.yaml
 ├── src/
-│   ├── setup/
-│   ├── host/
 │   ├── client/
+│   ├── host/
+│   ├── protocols/
+│   ├── security/
+│   ├── setup/
 │   ├── logging/
 │   └── data_structures/
-├── bin/
-├── obj/
 
----
+## Data Storage
 
-## ⚙️ How It Works
+Application data is stored locally on each machine:
 
-On first launch, the application:
-1. Detects host machine info
-2. Creates data/.data/
-3. Generates:
-   - host.yaml
-   - transfer_logs.yaml
+- Windows: %AppData%/SecureFileTransfer
+- macOS/Linux: ~/.securefiletransfer
 
----
+This includes:
 
-## 🖥️ CLI Menu
+- host configuration
+- peer list
+- transfer logs
+- debug logs
 
-Secure File Transfer
-1. View host info
-2. Manage peers
-3. Start host
-4. Start client
-5. Re-run setup
-6. Exit
+## Running the CLI
 
----
+If running from source:
 
-## 📦 Data Storage
-
-Location:
-SecureFileTransfer/data/.data/
-
----
-
-## 🛠️ Setup Instructions
-
-Prerequisites:
-- .NET 8+
-
-Run:
 dotnet run
 
----
+If using a published build:
 
-## 🔐 Security (Planned)
+./sft (macOS/Linux)
+sft.exe (Windows)
 
-- AES encryption
-- Secure key exchange
-- Authentication
+## Installation (Optional)
 
----
+macOS / Linux:
 
-## 🌐 Networking
+chmod +x sft
+sudo mv sft /usr/local/bin/sft
 
-- TCP sockets
+Windows:
+
+Add the folder containing sft.exe to your system PATH.
+
+## Networking
+
+- Uses TCP sockets
 - Default port: 5000
-- IPv4 first, IPv6 later
+- Works over local network (IPv4)
 
----
+## Development Status
 
-## 🧪 Development Status
+Current version: CLI Alpha 1.0
 
 Completed:
-- CLI
-- Config system
-- Logging
 
-In Progress:
-- Host/client networking
+- Core CLI functionality
+- Host/client communication
+- Encrypted file transfer
+- Logging and configuration system
 
 Planned:
-- File transfer
-- Encryption
 
----
+- GUI application
+- Resume interrupted transfers
+- Improved peer management
+- IPv6 connection for file transfers over different wifi connections
 
-## 📌 Notes
+## Notes
 
-- .data folder is ignored in git
-- Logs are local only
+- All data and logs are stored locally
+- No external services are used
 
----
-
-## 🧑‍💻 Author
+## Author
 
 Arihant Singh
