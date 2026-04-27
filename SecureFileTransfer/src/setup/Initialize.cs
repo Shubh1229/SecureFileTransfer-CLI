@@ -12,16 +12,16 @@ namespace SecureFileTransfer.src.setup
     {
         public Initialize()
         {
+            AppPaths.EnsureAppDirectoryExists();
+
             DebugLogger.Separator("INITIALIZE");
             DebugLogger.Log("Initialize started.");
 
-            string path = Path.Combine("data", ".data", "find_file_path.txt");
+            string path = AppPaths.FindFilePathConfig;
             string findFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Desktop"
             );
-
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
             if (!File.Exists(path))
             {
@@ -93,9 +93,7 @@ namespace SecureFileTransfer.src.setup
 
             string yaml = serializer.Serialize(host);
 
-            path = Path.Combine("data", ".data", "host.yaml");
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
+            path = AppPaths.HostConfigPath;
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, yaml);
@@ -105,31 +103,32 @@ namespace SecureFileTransfer.src.setup
             TransferHistoryModel logs = new();
             yaml = serializer.Serialize(logs);
 
-            path = Path.Combine("data", ".data", "transfer_logs.yaml");
+            path = AppPaths.TransferLogsPath;
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, yaml);
                 DebugLogger.Log("Created transfer_logs.yaml");
             }
 
-            path = Path.Combine("data", ".data", "download_path.txt");
-            string downloadpath = Path.Combine(
+            path = AppPaths.DownloadPathConfig;
+            string downloadPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Downloads"
             );
 
             if (!File.Exists(path))
             {
-                File.WriteAllText(path, downloadpath);
-                DebugLogger.Log($"Created download_path.txt with default path: {downloadpath}");
+                File.WriteAllText(path, downloadPath);
+                DebugLogger.Log($"Created download_path.txt with default path: {downloadPath}");
             }
 
-            path = Path.Combine("data", ".data", "debug.log");
+            path = AppPaths.DebugLogPath;
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, "");
             }
 
+            DebugLogger.Log($"Application data directory: {AppPaths.AppDataDirectory}");
             DebugLogger.Log("Initialize finished.");
         }
     }

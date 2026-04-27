@@ -7,12 +7,17 @@ namespace SecureFileTransfer.src.setup
 {
     public static class HostConfigManager
     {
-        private static readonly string PathToConfig =
-            Path.Combine(Directory.GetCurrentDirectory(), "data", ".data", "host.yaml");
+        private static readonly string PathToConfig = AppPaths.HostConfigPath;
 
         public static HostModel Load()
         {
+            AppPaths.EnsureAppDirectoryExists();
             DebugLogger.Log($"HostConfigManager loading host config from: {PathToConfig}");
+
+            if (!File.Exists(PathToConfig))
+            {
+                throw new FileNotFoundException($"Host config not found: {PathToConfig}");
+            }
 
             string yaml = File.ReadAllText(PathToConfig);
 
@@ -32,13 +37,13 @@ namespace SecureFileTransfer.src.setup
 
         public static void Save(HostModel host)
         {
+            AppPaths.EnsureAppDirectoryExists();
+
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
                 .Build();
 
             string yaml = serializer.Serialize(host);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(PathToConfig)!);
             File.WriteAllText(PathToConfig, yaml);
 
             DebugLogger.Log($"HostConfigManager saved host config for: {host.HostName} ({host.IPv4})");
