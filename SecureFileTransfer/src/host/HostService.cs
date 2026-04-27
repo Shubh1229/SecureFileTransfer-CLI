@@ -1,9 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
+using SecureFileTransfer.src.protocols;
+using SecureFileTransfer.src.security;
 using SecureFileTransfer.src.setup;
 
 namespace SecureFileTransfer.src.host
@@ -68,7 +69,7 @@ namespace SecureFileTransfer.src.host
                 using NetworkStream stream = client.GetStream();
 
                 DebugLogger.Log("Starting host handshake.");
-                connection = HostHandshake(host, stream);
+                connection = HandshakeProtocol.ReadHandshake(host, stream);
                 if (connection == null)
                 {
                     DebugLogger.Log("Host handshake returned null.");
@@ -78,7 +79,16 @@ namespace SecureFileTransfer.src.host
                     return;
                 }
 
-                TransferPlanModel? plan = ReadTransferPlan(stream);
+                SessionKeyModel sessionKey = KeyExchangeProtocol.RunHost(stream);
+
+                if (!sessionKey.IsEstablished)
+                {
+                    logger.FinishConnection(connection, false);
+                    Console.WriteLine("Key exchange failed...");
+                    return;
+                }
+
+                TransferPlanModel? plan = TransferPlanProtocol.Read(stream);
                 if (plan == null)
                 {
                     logger.FinishConnection(connection, false);
@@ -93,7 +103,7 @@ namespace SecureFileTransfer.src.host
                 for (int i = 0; i < plan.FileCount; i++)
                 {
                     DebugLogger.Log($"Reading file info #{i + 1} of {plan.FileCount}");
-                    FileInfoModel? incomingFile = ReadFileInfo(stream);
+                    FileInfoModel? incomingFile = FileInfoProtocol.Read(stream);
                     if (incomingFile == null)
                     {
                         logger.FinishConnection(connection, false);
@@ -105,7 +115,7 @@ namespace SecureFileTransfer.src.host
                     string filePath = Path.Combine(selectedDownloadPath, incomingFile.SuggestedSaveName);
                     DebugLogger.Log($"Prepared destination path for incoming file: {filePath}");
 
-                    bool fileReceived = ReceiveFileBytes(stream, filePath, incomingFile.FileSizeBytes);
+                    bool fileReceived = FileTransferProtocol.Read(stream, filePath, incomingFile.FileSizeBytes, sessionKey);
 
                     logger.AddFileLog(connection, incomingFile.FileName, incomingFile.FileSizeBytes, fileReceived);
 
@@ -143,182 +153,6 @@ namespace SecureFileTransfer.src.host
                 Console.ReadKey();
                 Console.Clear();
             }
-        }
-
-        private bool ReceiveFileBytes(NetworkStream stream, string destinationPath, long fileSizeBytes)
-        {
-            const int BUFFER_SIZE = 8192;
-
-            try
-            {
-                string? directory = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrWhiteSpace(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                using FileStream fileStream = new(
-                    destinationPath,
-                    FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None
-                );
-
-                byte[] buffer = new byte[BUFFER_SIZE];
-                long remaining = fileSizeBytes;
-                long totalWritten = 0;
-
-                while (remaining > 0)
-                {
-                    int bytesToRead = (int)Math.Min(buffer.Length, remaining);
-                    int bytesRead = stream.Read(buffer, 0, bytesToRead);
-
-                    if (bytesRead == 0)
-                    {
-                        DebugLogger.Log($"ReceiveFileBytes hit EOF early. Remaining={remaining}");
-                        return false;
-                    }
-
-                    fileStream.Write(buffer, 0, bytesRead);
-                    remaining -= bytesRead;
-                    totalWritten += bytesRead;
-                    Console.Write($"\rReceiving: {totalWritten}/{fileSizeBytes} bytes");
-                }
-
-                fileStream.Flush();
-                DebugLogger.Log($"Received {totalWritten} bytes into: {destinationPath}");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                DebugLogger.LogError($"HostService.ReceiveFileBytes ({destinationPath})", ex);
-                return false;
-            }
-        }
-
-        private ConnectionLogModel? HostHandshake(HostModel host, NetworkStream stream)
-        {
-            DebugLogger.Log("Host waiting for handshake message.");
-            string? messageRead = MessageHelper.ReadMessage(stream);
-
-            if (string.IsNullOrWhiteSpace(messageRead))
-            {
-                DebugLogger.Log("Host never received handshake.");
-                Console.WriteLine("Never received handshake.");
-                return null;
-            }
-
-            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
-            if (receivedHandshake == null)
-            {
-                DebugLogger.Log("Host failed to parse handshake.");
-                Console.WriteLine("Failed to parse handshake.");
-                return null;
-            }
-
-            DebugLogger.Log($"Received handshake from {receivedHandshake.SenderName} ({receivedHandshake.SenderIPv4})");
-
-            bool hasPeer = false;
-            foreach (PeersModel peer in host.Peers)
-            {
-                if (peer.IPv4 == receivedHandshake.SenderIPv4 || peer.PeerName == receivedHandshake.SenderName)
-                {
-                    hasPeer = true;
-                    break;
-                }
-            }
-
-            if (!hasPeer)
-            {
-                DebugLogger.Log("Peer not found in host config. Adding peer.");
-                AddPeer(host, receivedHandshake);
-            }
-
-            HandshakeModel handshake = new()
-            {
-                SenderName = host.HostName,
-                SenderIPv4 = host.IPv4,
-                SenderIPv6 = host.IPv6
-            };
-
-            DebugLogger.Log("Host sending handshake response.");
-            MessageHelper.SendMessage(stream, handshake.ToJson());
-
-            return new ConnectionLogModel()
-            {
-                RemoteComputerName = receivedHandshake.SenderName,
-                RemoteIPv4 = receivedHandshake.SenderIPv4,
-                RemoteIPv6 = receivedHandshake.SenderIPv6
-            };
-        }
-
-        private void AddPeer(HostModel host, HandshakeModel receivedHandshake)
-        {
-            var peers = host.Peers.ToList();
-            peers.Add(new PeersModel()
-            {
-                PeerName = receivedHandshake.SenderName,
-                IPv4 = receivedHandshake.SenderIPv4,
-                IPv6 = receivedHandshake.SenderIPv6
-            });
-
-            host.Peers = peers.ToArray();
-            HostConfigManager.Save(host);
-            DebugLogger.Log($"Peer added and host config saved: {receivedHandshake.SenderName} ({receivedHandshake.SenderIPv4})");
-        }
-
-        private TransferPlanModel? ReadTransferPlan(NetworkStream stream)
-        {
-            DebugLogger.Log("Host waiting for transfer plan.");
-            string? json = MessageHelper.ReadMessage(stream);
-
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                DebugLogger.Log("No transfer plan received.");
-                Console.WriteLine("No transfer plan received.");
-                return null;
-            }
-
-            TransferPlanModel? plan = JsonSerializer.Deserialize<TransferPlanModel>(json);
-            if (plan == null)
-            {
-                DebugLogger.Log("Failed to deserialize transfer plan.");
-                Console.WriteLine("Failed to deserialize transfer plan.");
-                return null;
-            }
-
-            DebugLogger.Log($"Transfer plan deserialized successfully. FileCount={plan.FileCount}");
-            return plan;
-        }
-
-        private FileInfoModel? ReadFileInfo(NetworkStream stream)
-        {
-            DebugLogger.Log("Host waiting for file info.");
-            string? json = MessageHelper.ReadMessage(stream);
-
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                DebugLogger.Log("No file info received.");
-                Console.WriteLine("No file info received.");
-                return null;
-            }
-
-            FileInfoModel? fileInfo = JsonSerializer.Deserialize<FileInfoModel>(json);
-
-            if (fileInfo == null)
-            {
-                DebugLogger.Log("Failed to deserialize file info.");
-                Console.WriteLine("Failed to deserialize file info.");
-                return null;
-            }
-
-            DebugLogger.Log($"Received file info: {fileInfo.FileName}, {fileInfo.FileSizeBytes} bytes");
-            Console.WriteLine("\nIncoming file info:");
-            Console.WriteLine($"Name: {fileInfo.FileName}");
-            Console.WriteLine($"Size: {fileInfo.FileSizeBytes} bytes");
-            Console.WriteLine($"Suggested Save Name: {fileInfo.SuggestedSaveName}");
-
-            return fileInfo;
         }
     }
 }

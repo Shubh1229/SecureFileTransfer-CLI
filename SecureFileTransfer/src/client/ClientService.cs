@@ -1,8 +1,9 @@
 using System.Net.Sockets;
-using System.Text.Json;
 using SecureFileTransfer.src.data_structures;
 using SecureFileTransfer.src.helper;
 using SecureFileTransfer.src.logging;
+using SecureFileTransfer.src.protocols;
+using SecureFileTransfer.src.security;
 using SecureFileTransfer.src.setup;
 
 namespace SecureFileTransfer.src.client
@@ -57,6 +58,18 @@ namespace SecureFileTransfer.src.client
                 peer.IPv6
             );
 
+            DebugLogger.Log("Selecting files.");
+            List<string> selectedFiles = SelectFiles();
+            if (selectedFiles.Count == 0)
+            {
+                Console.WriteLine("No files selected.");
+                logger.FinishConnection(connectionLog, false);
+                DebugLogger.Log("No files selected.");
+                logger.SaveConnection(connectionLog);
+                return;
+            }
+
+
             try
             {
                 DebugLogger.Log($"Attempting TCP connection to {peer.IPv4}:{PORT}");
@@ -67,7 +80,7 @@ namespace SecureFileTransfer.src.client
                 using NetworkStream stream = tcpClient.GetStream();
 
                 DebugLogger.Log("Starting client handshake.");
-                bool handshakeSuccess = ClientHandshake(host, stream);
+                bool handshakeSuccess = HandshakeProtocol.SendHandShake(host, stream);
                 if (!handshakeSuccess)
                 {
                     logger.FinishConnection(connectionLog, false);
@@ -76,26 +89,24 @@ namespace SecureFileTransfer.src.client
                     return;
                 }
 
-                DebugLogger.Log("Selecting files.");
-                List<string> selectedFiles = SelectFiles();
-                if (selectedFiles.Count == 0)
+                SessionKeyModel sessionKey = KeyExchangeProtocol.RunClient(stream);
+
+                if (!sessionKey.IsEstablished)
                 {
-                    Console.WriteLine("No files selected.");
-                    logger.FinishConnection(connectionLog, false);
-                    DebugLogger.Log("No files selected.");
+                    Console.WriteLine("Key exchange failed...");
                     return;
                 }
 
                 DebugLogger.Log($"Selected {selectedFiles.Count} file(s). Sending transfer plan.");
-                SendTransferPlan(stream, selectedFiles.Count);
+                TransferPlanProtocol.Send(stream, selectedFiles.Count);
 
                 foreach (string filePath in selectedFiles)
                 {
                     DebugLogger.Log($"Sending file info for: {filePath}");
-                    SendFileInfo(stream, filePath);
+                    FileInfoProtocol.Send(stream, filePath);
 
                     DebugLogger.Log($"Starting file byte transfer for: {filePath}");
-                    bool fileSent = SendFileBytes(stream, filePath);
+                    bool fileSent = FileTransferProtocol.Send(stream, filePath, sessionKey);
 
                     FileInfo fileStats = new(filePath);
                     DebugLogger.Log($"Logged file metadata: {fileStats.Name} ({fileStats.Length} bytes)");
@@ -129,76 +140,6 @@ namespace SecureFileTransfer.src.client
             }
         }
 
-        private bool SendFileBytes(NetworkStream stream, string selectedFile)
-        {
-            const int BUFFER_SIZE = 8192;
-
-            try
-            {
-                using FileStream fileStream = new(
-                    selectedFile,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read
-                );
-
-                byte[] buffer = new byte[BUFFER_SIZE];
-                int bytesRead;
-                long totalSent = 0;
-
-                while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    stream.Write(buffer, 0, bytesRead);
-                    totalSent += bytesRead;
-                }
-
-                stream.Flush();
-
-                DebugLogger.Log($"Sent {totalSent} bytes for file: {selectedFile}");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                DebugLogger.LogError($"ClientService.SendFileBytes ({selectedFile})", ex);
-                return false;
-            }
-        }
-
-        private bool ClientHandshake(HostModel host, NetworkStream stream)
-        {
-            HandshakeModel handshake = new()
-            {
-                SenderName = host.HostName,
-                SenderIPv4 = host.IPv4,
-                SenderIPv6 = host.IPv6
-            };
-
-            DebugLogger.Log("Client sending handshake message.");
-            MessageHelper.SendMessage(stream, handshake.ToJson());
-
-            string? messageRead = MessageHelper.ReadMessage(stream);
-            if (string.IsNullOrWhiteSpace(messageRead))
-            {
-                DebugLogger.Log("Client never received handshake return.");
-                Console.WriteLine("Never received handshake return.");
-                return false;
-            }
-
-            HandshakeModel? receivedHandshake = HandshakeModel.FromJson(messageRead);
-            if (receivedHandshake == null)
-            {
-                DebugLogger.Log("Client failed to parse handshake return.");
-                Console.WriteLine("Failed to parse handshake return.");
-                return false;
-            }
-
-            DebugLogger.Log($"Handshake completed with {receivedHandshake.SenderName} ({receivedHandshake.SenderIPv4})");
-            Console.WriteLine("Handshake completed.");
-            Console.WriteLine($"Remote name: {receivedHandshake.SenderName}");
-            Console.WriteLine($"Remote IPv4: {receivedHandshake.SenderIPv4}");
-
-            return true;
-        }
 
         private List<string> SelectFiles()
         {
@@ -243,41 +184,6 @@ namespace SecureFileTransfer.src.client
             }
 
             return selectedFiles;
-        }
-
-        private void SendTransferPlan(NetworkStream stream, int fileCount)
-        {
-            TransferPlanModel plan = new()
-            {
-                FileCount = fileCount
-            };
-
-            string json = JsonSerializer.Serialize(plan);
-            MessageHelper.SendMessage(stream, json);
-
-            DebugLogger.Log($"Sent transfer plan for {fileCount} file(s).");
-            Console.WriteLine($"Sent transfer plan for {fileCount} file(s).");
-        }
-
-        private void SendFileInfo(NetworkStream stream, string selectedFile)
-        {
-            FileInfo fileStats = new(selectedFile);
-
-            FileInfoModel file = new()
-            {
-                FileName = fileStats.Name,
-                FileSizeBytes = fileStats.Length,
-                RelativeSourcePath = selectedFile,
-                SuggestedSaveName = fileStats.Name
-            };
-
-            string json = JsonSerializer.Serialize(file);
-            MessageHelper.SendMessage(stream, json);
-
-            DebugLogger.Log($"Sent file info: {file.FileName}, {file.FileSizeBytes} bytes");
-            Console.WriteLine("Sent file info:");
-            Console.WriteLine($"Name: {file.FileName}");
-            Console.WriteLine($"Size: {file.FileSizeBytes}");
         }
     }
 }
